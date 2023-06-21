@@ -1,12 +1,9 @@
 import requests
 import pandas as pd
 
+headers = {"Content-Type": "application/json"}
 
-def call_data(url):
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
+def call_data(url, headers):
     response = requests.get(url=url, headers=headers)
     return response.json()
 
@@ -23,6 +20,11 @@ def clean_up(json):
     }
     df = pd.DataFrame(selected_values)
     return df
+
+
+def get_pools_data(pool_id, headers):
+    response = requests.get(f"https://yields.llama.fi/chart/{pool_id}")
+    return response.json()
 
 if __name__=="__main__":
     result = call_data(url="https://yields.llama.fi/pools")
