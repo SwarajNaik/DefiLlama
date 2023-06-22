@@ -5,9 +5,9 @@ services:
     image: postgres
     restart: always
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
-      POSTGRES_DB: test_db
+      POSTGRES_USER: Defillama
+      POSTGRES_PASSWORD: Qaws!234
+      POSTGRES_DB: Defillama
     ports:
       - "5432:5432"
   pgadmin:
