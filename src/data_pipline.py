@@ -17,7 +17,6 @@ def clean_up_pools(json):
         "stablecoin":[item["stablecoin"] for item in json],
         "count":[item["count"] for item in json],
         "volumeUsd7d":[item["volumeUsd7d"] for item in json]
-        # "symbol":[item["symbol"] for item in json],
     }
     df = pd.DataFrame(selected_values)
     df = df[df["project"]== "uniswap-v3"]
@@ -67,3 +66,5 @@ if __name__=="__main__":
     
     df = clean_up_pool_data(data=pool_df['data'])
     push_data_to_ps(data=df, name_of_table="USDC/WETH_pool")
+
+
