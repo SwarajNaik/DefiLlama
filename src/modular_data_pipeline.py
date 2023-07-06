@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -12,19 +14,21 @@ class DefiLlama:
     def __init__(self):
         self.headers = {"Content-Type": "application/json"}
         self.configs = None
+        self.loop = asyncio.get_event_loop()
 
-    def _get_the_configs(self):
+    async def _get_the_configs(self):
         current_dir = Path.cwd()
         parent_directory = current_dir.parent
         os.chdir(parent_directory)
         with open("docker-compose.yaml") as f:
             self.configs = yaml.safe_load(f)
+        # return self.configs
 
-    def _call_data(self, url):
+    async def _call_data(self, url):
         response = requests.get(url=url, headers=self.headers)
         return response.json()
-
-    def _clean_up_pools(self, json):
+    
+    async def _clean_up_pools(self, json):
         selected_values = {
             "chain": [item["chain"] for item in json],
             "project": [item["project"] for item in json],
@@ -39,14 +43,14 @@ class DefiLlama:
         df = df.reset_index(drop=True)
         return df
 
-    def _get_pool_id(self, pools_data):
+    async def _get_pool_id(self, pools_data):
         pools_data = pools_data[pools_data["chain"] == "Ethereum"]
         pools_data = pools_data.sort_values("volumeUsd7d", ascending=False)
         pools_df_50 = pools_data.head(50)
         pools_list = pools_df_50[["symbol", "pool"]]
         return pools_list
 
-    def _get_pools_data(self, list_of_pools):
+    async def _get_pools_data(self, list_of_pools):
         main_df = pd.DataFrame()
         for pool_id in list_of_pools["pool"].tolist():
             response = requests.get(f"https://yields.llama.fi/chart/{pool_id}")
@@ -58,7 +62,7 @@ class DefiLlama:
             main_df = main_df.append(df, ignore_index=True)
         return main_df
 
-    def _push_data_to_ps(self, data, name_of_table):
+    async def _push_data_to_ps(self, data, name_of_table):
         pg = self.configs["services"]["db"]["environment"]
         pg_user = pg["POSTGRES_USER"]
         pg_pass = pg["POSTGRES_PASSWORD"]
@@ -72,17 +76,31 @@ class DefiLlama:
         logging.info(f"Connection successful with these configs: {pg}")
         data.to_sql(f"{name_of_table}", con=conn, if_exists="replace")
         logging.info(f"Successfully pushed '{name_of_table}' to the '{pg_db}' db")
+        
+        return "data_pushed"
 
-    def process_data(self):
-        self._get_the_configs()
+    async def process_data(self):
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        # print(Path.cwd())
+        # print(f"start time {current_time}")
+        await self._get_the_configs()
 
-        result = self._call_data(url="https://yields.llama.fi/pools")
-        df_main = self._clean_up_pools(result["data"])
-        self._push_data_to_ps(data=df_main, name_of_table="pools_defillama")
+        result = await self._call_data(url="https://yields.llama.fi/pools")
+        df_main = await self._clean_up_pools(result["data"])
+        await self._push_data_to_ps(data=df_main, name_of_table="pools_defillama")
+        # print("Pushed pools_defillama")
 
-        list_of_id = self._get_pool_id(pools_data=df_main)
-        df = self._get_pools_data(list_of_pools=list_of_id)
-        self._push_data_to_ps(data=df, name_of_table="Historical_50pools")
+        list_of_id = await self._get_pool_id(pools_data=df_main)
+        df = await self._get_pools_data(list_of_pools=list_of_id)
+        await self._push_data_to_ps(data=df, name_of_table="Historical_50pools")
+        # print("Pushed 50pools")
+        # print(f"end time {current_time}")
+        return "Done"
+        
+
+    async def main(self):
+        await asyncio.gather(self.process_data())
 
 
 if __name__ == "__main__":
@@ -94,4 +112,5 @@ if __name__ == "__main__":
     )
 
     processor = DefiLlama()
-    processor.process_data()
+    loop = asyncio.get_event_loop()
+    asyncio.run_coroutine_threadsafe(processor.main(), loop=loop)
