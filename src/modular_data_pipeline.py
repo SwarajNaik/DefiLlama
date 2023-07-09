@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -22,12 +21,11 @@ class DefiLlama:
         os.chdir(parent_directory)
         with open("docker-compose.yaml") as f:
             self.configs = yaml.safe_load(f)
-        # return self.configs
 
     async def _call_data(self, url):
         response = requests.get(url=url, headers=self.headers)
         return response.json()
-    
+
     async def _clean_up_pools(self, json):
         selected_values = {
             "chain": [item["chain"] for item in json],
@@ -76,28 +74,38 @@ class DefiLlama:
         logging.info(f"Connection successful with these configs: {pg}")
         data.to_sql(f"{name_of_table}", con=conn, if_exists="replace")
         logging.info(f"Successfully pushed '{name_of_table}' to the '{pg_db}' db")
-        
+
         return "data_pushed"
+    
+    async def _pull_data_from_ps(self, name_of_table):
+        pg = self.configs["services"]["db"]["environment"]
+        pg_user = pg["POSTGRES_USER"]
+        pg_pass = pg["POSTGRES_PASSWORD"]
+        pg_db = pg["POSTGRES_DB"]
+        pg_port = self.configs["services"]["db"]["ports"][0]
+        pg_port = pg_port[:4]
+        engine = create_engine(
+            f"postgresql://{pg_user}:{pg_pass}@localhost:{pg_port}/{pg_db}"
+        )
+        conn = engine.connect()
+        query = f"SELECT * FROM {name_of_table} LIMIT 10"
+        df = pd.read_sql_query(sql=query, con=conn)
+        
+        return df
+        
 
     async def process_data(self):
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        # print(Path.cwd())
-        # print(f"start time {current_time}")
         await self._get_the_configs()
 
         result = await self._call_data(url="https://yields.llama.fi/pools")
         df_main = await self._clean_up_pools(result["data"])
         await self._push_data_to_ps(data=df_main, name_of_table="pools_defillama")
-        # print("Pushed pools_defillama")
 
         list_of_id = await self._get_pool_id(pools_data=df_main)
         df = await self._get_pools_data(list_of_pools=list_of_id)
-        await self._push_data_to_ps(data=df, name_of_table="Historical_50pools")
-        # print("Pushed 50pools")
-        # print(f"end time {current_time}")
+        await self._push_data_to_ps(data=df, name_of_table="historical_50pools")
+
         return "Done"
-        
 
     async def main(self):
         await asyncio.gather(self.process_data())
