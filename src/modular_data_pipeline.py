@@ -88,7 +88,7 @@ class DefiLlama:
             f"postgresql://{pg_user}:{pg_pass}@localhost:{pg_port}/{pg_db}"
         )
         conn = engine.connect()
-        query = f"SELECT * FROM {name_of_table} LIMIT 10"
+        query = f"SELECT * FROM {name_of_table}"
         df = pd.read_sql_query(sql=query, con=conn)
         
         return df
